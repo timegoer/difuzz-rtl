@@ -6,8 +6,8 @@ from inst_generator import Word, rvInstGenerator, PREFIX, MAIN, SUFFIX
 
 """ Mutation phases """
 GENERATION = 0
-MUTATION   = 1
-MERGE      = 2
+MUTATION = 1
+MERGE = 2
 
 """ Template versions """
 P_M = 0
@@ -18,11 +18,19 @@ P_U = 2
 # V_S = 3
 V_U = 3
 
-templates = [ 'p-m', 'p-s', 'p-u',
-              'v-u']
+templates = ["p-m", "p-s", "p-u", "v-u"]
 
-class simInput():
-    def __init__(self, prefix: list, words: list, suffix: list, ints: list, data_seed: int, template: int):
+
+class simInput:
+    def __init__(
+        self,
+        prefix: list,
+        words: list,
+        suffix: list,
+        ints: list,
+        data_seed: int,
+        template: int,
+    ):
         self.prefix = prefix
         self.words = words
         self.suffix = suffix
@@ -40,22 +48,22 @@ class simInput():
         insts = self.get_insts()
         suffix_insts = self.get_suffix()
 
-        fd = open(name, 'w')
-        fd.write('{}\n\n'.format(templates[self.template]))
+        fd = open(name, "w")
+        fd.write("{}\n\n".format(templates[self.template]))
 
         for inst in prefix_insts[:-1]:
-            fd.write('{:<50}\n'.format(inst))
+            fd.write("{:<50}\n".format(inst))
 
-        for (inst, INT) in zip(insts, self.ints):
-            fd.write('{:<50}{:04b}\n'.format(inst, INT))
+        for inst, INT in zip(insts, self.ints):
+            fd.write("{:<50}{:04b}\n".format(inst, INT))
 
         for inst in suffix_insts[:-1]:
-            fd.write('{:<50}\n'.format(inst))
+            fd.write("{:<50}\n".format(inst))
 
         if data:
-            fd.write('data:\n')
+            fd.write("data:\n")
             for word in data:
-                fd.write('{:016x}\n'.format(word))
+                fd.write("{:016x}\n".format(word))
 
         fd.close()
 
@@ -70,7 +78,7 @@ class simInput():
         for word in self.prefix:
             insts += word.get_insts()
 
-        insts.append(PREFIX + '{}:'.format(self.num_prefix))
+        insts.append(PREFIX + "{}:".format(self.num_prefix))
         return insts
 
     def get_insts(self):
@@ -78,7 +86,7 @@ class simInput():
         for word in self.words:
             insts += word.get_insts()
 
-        insts.append(MAIN + '{}:'.format(self.num_words))
+        insts.append(MAIN + "{}:".format(self.num_words))
         return insts
 
     def get_suffix(self):
@@ -86,12 +94,12 @@ class simInput():
         for word in self.suffix:
             insts += word.get_insts()
 
-        insts.append(SUFFIX + '{}:'.format(self.num_suffix))
+        insts.append(SUFFIX + "{}:".format(self.num_suffix))
         return insts
 
 
-class rvMutator():
-    def __init__(self, max_data_seeds=100, corpus_size=1000, no_guide=False):
+class rvMutator:
+    def __init__(self, max_data_seeds=100, corpus_size=100, no_guide=False):
         self.corpus_size = corpus_size
         self.corpus = []
 
@@ -109,7 +117,7 @@ class rvMutator():
         self.random_data = {}
         self.data_seeds = []
 
-        self.inst_generator = rvInstGenerator('RV64G')
+        self.inst_generator = rvInstGenerator("RV64G")
 
     def add_data(self, new_data=[]):
         if len(self.data_seeds) == self.max_data:
@@ -120,22 +128,26 @@ class rvMutator():
         if new_data:
             self.random_data[seed] = new_data
         else:
-            self.random_data[seed] = [ random.randint(0, 0xffffffffffffffff) for i in range(64 * 6)] # TODO, Num_data_sections = 6
+            self.random_data[seed] = [
+                random.randint(0, 0xFFFFFFFFFFFFFFFF) for i in range(64 * 6)
+            ]  # TODO, Num_data_sections = 6
         self.data_seeds.append(seed)
 
         return seed
 
     def update_data_seeds(self, seed):
-        assert self.data_seeds.count(seed) == 1, \
-            '{} entrie(s) of {} exist in Mutator data_seeds'. \
-            format(self.data_seeds.count(seed), seed)
+        assert (
+            self.data_seeds.count(seed) == 1
+        ), "{} entrie(s) of {} exist in Mutator data_seeds".format(
+            self.data_seeds.count(seed), seed
+        )
 
         idx = self.data_seeds.index(seed)
         self.data_seeds.pop(idx)
         self.data_seeds.append(seed)
 
     def read_label(self, line, tuples):
-        label = line[:8].split(':')[0]
+        label = line[:8].split(":")[0]
         label_num = int(label[2:])
 
         insts = []
@@ -158,7 +170,7 @@ class rvMutator():
         return words
 
     def read_siminput(self, si_name):
-        fd = open(si_name, 'r')
+        fd = open(si_name, "r")
         lines = fd.readlines()
         fd.close()
 
@@ -176,18 +188,22 @@ class rvMutator():
         tmp_tuples = None
         num_tmp = None
 
-        template_word = lines.pop(0).split('\n')[0]
+        template_word = lines.pop(0).split("\n")[0]
         template = templates.index(template_word)
         lines.pop(0)
         while True:
-            try: line = lines.pop(0)
-            except: break
+            try:
+                line = lines.pop(0)
+            except:
+                break
 
-            if 'data:' in line:
+            if "data:" in line:
                 part = None
                 while True:
-                    try: word = lines.pop(0)
-                    except: break
+                    try:
+                        word = lines.pop(0)
+                    except:
+                        break
 
                     data.append(int(word, 16))
                 break
@@ -203,7 +219,7 @@ class rvMutator():
                 num_word += 1
                 tmp_tuples = self.read_label(line, word_tuples)
                 num_tmp = num_word
-               
+
                 tmp_tuples[num_tmp - 1][1].append(line[8:50])
             elif line[:2] == SUFFIX:
                 part = SUFFIX
@@ -227,7 +243,7 @@ class rvMutator():
         data = self.random_data[data_seed]
 
         assert_intr = False
-        if [ i for i in ints if i != 0 ]:
+        if [i for i in ints if i != 0]:
             assert_intr = True
 
         return (sim_input, data, assert_intr)
@@ -240,17 +256,21 @@ class rvMutator():
         ints = sim_input.ints
         template = sim_input.template
 
-        if part == PREFIX: target = prefix
-        elif part == MAIN: target = words
-        else: target = suffix
+        if part == PREFIX:
+            target = prefix
+        elif part == MAIN:
+            target = words
+        else:
+            target = suffix
 
-        assert len(target) == len(nop_mask), \
-            'Length of words and nop_mask are not equal'
+        assert len(target) == len(
+            nop_mask
+        ), "Length of words and nop_mask are not equal"
 
         new_target = []
-        for (word, mask) in zip(target, nop_mask):
+        for word, mask in zip(target, nop_mask):
             if mask:
-                new_word = Word(word.label, ['nop'])
+                new_word = Word(word.label, ["nop"])
                 new_word.populate({}, part)
                 new_target.append(new_word)
             else:
@@ -265,11 +285,13 @@ class rvMutator():
                 if nop_mask[i]:
                     new_ints += [0] * new_target[i].len_insts
                 else:
-                    new_ints += [ ints[k + j] for j in range(new_target[i].len_insts) ]
+                    new_ints += [ints[k + j] for j in range(new_target[i].len_insts)]
 
                 k += new_target[i].len_insts
 
-            min_input = simInput(prefix, new_target, suffix, new_ints, data_seed, template)
+            min_input = simInput(
+                prefix, new_target, suffix, new_ints, data_seed, template
+            )
         else:
             min_input = simInput(prefix, words, new_target, ints, data_seed, template)
 
@@ -287,22 +309,29 @@ class rvMutator():
         words_map = {}
         new_ints = []
         k = 0
-        for (part, target) in zip([PREFIX, MAIN, SUFFIX], [prefix, words, suffix]):
+        for part, target in zip([PREFIX, MAIN, SUFFIX], [prefix, words, suffix]):
             tmps = []
             for word in target:
-                if word.insts != ['nop']:
+                if word.insts != ["nop"]:
                     new_word = deepcopy(word)
                     tmps.append(new_word)
 
                 if part == MAIN:
-                    if word.insts != ['nop']:
-                        new_ints += ints[k:k+word.len_insts]
+                    if word.insts != ["nop"]:
+                        new_ints += ints[k : k + word.len_insts]
                     k += word.len_insts
 
             new_target = self.reset_labels(tmps, part)
             words_map[part] = new_target
 
-        del_input = simInput(words_map[PREFIX], words_map[MAIN], words_map[SUFFIX], new_ints, data_seed, template)
+        del_input = simInput(
+            words_map[PREFIX],
+            words_map[MAIN],
+            words_map[SUFFIX],
+            new_ints,
+            data_seed,
+            template,
+        )
         data = self.random_data[data_seed]
 
         return (del_input, data)
@@ -314,8 +343,7 @@ class rvMutator():
         start = max(num_files - update_num, 0)
         for i in range(start, num_files):
             try:
-                (sim_input, _) = self.read_siminput(corpus_dir +
-                                                    '/id_{}.si'.format(i))
+                (sim_input, _) = self.read_siminput(corpus_dir + "/id_{}.si".format(i))
                 self.add_corpus(sim_input)
             except:
                 continue
@@ -324,7 +352,7 @@ class rvMutator():
         n = 0
 
         label_map = {}
-        for (n, word) in enumerate(words):
+        for n, word in enumerate(words):
             tup = word.reset_label(n, part)
             if tup:
                 label_map[tup[0]] = tup[1]
@@ -364,6 +392,7 @@ class rvMutator():
         data_seed = -1
         template = -1
         if self.phase == GENERATION:
+            print("[rvMutator] phase GENERATION")
             for n in range(self.num_prefix):
                 word = self.inst_generator.get_word(PREFIX)
                 prefix.append(word)
@@ -374,8 +403,9 @@ class rvMutator():
                 word = self.inst_generator.get_word(SUFFIX)
                 suffix.append(word)
 
-        elif self.phase in [ MUTATION, MERGE ]:
+        elif self.phase in [MUTATION, MERGE]:
             if self.phase == MUTATION:
+                print("[rvMutator] phase MUTATION")
                 seed_si = random.choice(self.corpus)
                 seed_prefix = deepcopy(seed_si.prefix)
                 seed_words = deepcopy(seed_si.words)
@@ -383,6 +413,7 @@ class rvMutator():
                 data_seed = seed_si.get_seed()
                 template = seed_si.get_template()
             else:
+                print("[rvMutator] phase MERGE")
                 seed_words = []
                 seed_si1 = random.choice(self.corpus)
                 seed_si2 = random.choice(self.corpus)
@@ -391,8 +422,7 @@ class rvMutator():
                 si1_words = deepcopy(seed_si1.words)
                 si2_words = deepcopy(seed_si2.words)
                 seed_suffix = deepcopy(seed_si1.suffix)
-                idx = random.randint(0, min(len(si1_words),
-                                            len(si2_words)))
+                idx = random.randint(0, min(len(si1_words), len(si2_words)))
 
                 for i in range(idx):
                     seed_words.append(si1_words[i])
@@ -416,10 +446,10 @@ class rvMutator():
         for word in suffix:
             self.inst_generator.populate_word(word, len(suffix), SUFFIX)
 
-        ints = [ 0 for i in range(i_len) ]
+        ints = [0 for i in range(i_len)]
         if assert_intr:
             idx = random.randint(0, min(len(ints), 10) - 1)
-            INT = random.randint(0x1, 0xf)
+            INT = random.randint(0x1, 0xF)
             ints[idx] = INT
 
         if data_seed == -1:
@@ -428,7 +458,7 @@ class rvMutator():
             self.update_data_seeds(data_seed)
 
         if template == -1:
-            template = random.randint(0, V_U)
+            template = random.randint(0, P_U)
 
         sim_input = simInput(prefix, words, suffix, ints, data_seed, template)
         data = self.random_data[data_seed]

@@ -4,13 +4,11 @@ package coverage
 
 import java.io.{File, PrintWriter}
 
-import firrtl.FirrtlProtos.Firrtl.BigInt
 import firrtl._
 import firrtl.ir._
 import firrtl.Mappers._
 import firrtl.PrimOps._
 
-import scala.collection.immutable.Range
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random

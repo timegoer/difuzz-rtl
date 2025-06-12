@@ -1,4 +1,8 @@
 __pycache__
 .ccls-cache
-
 build
+elf2hex
+Fuzzer/output
+Fuzzer/sim_build/
+Fuzzer/results.xml
+firrtl
