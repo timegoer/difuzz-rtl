@@ -1,7 +1,5 @@
-# Assembly file template for fuzzing
-
 #*********************************************************************
-# rv64-p-u.S
+# rv64-m.S
 #---------------------------------------------------------------------
 
 #include "riscv_test.h"
@@ -19,7 +17,7 @@ RVTEST_RV64UF
         .weak mtvec_handler;
         .global _start;
 _start:
-        /* reset vector */
+        /* 重置向量 */
 INIT_XREGS
         j reset_vector;
         .align;
@@ -29,21 +27,24 @@ INIT_FREGS
         .align;
 trap_stvec:
         clear_sie;
-_fuzz_suffix:
-        /* Fuzz suffix */
-        /**/
-_end_suffix:
         ecall
+        
+        /* 机器模式异常处理 */
+        .align 4;
 trap_mtvec: 
         clear_mie;
+_fuzz_trap:
+        /* Fuzz trap - 可以在此处插入自定义的异常处理代码 */
+        /**/
+_end_trap:
 
-  DUMP_REGS
-        
-  write_tohost:
-        li TESTEND, 1
-        sw TESTEND, tohost, t5;
-  _test_end:
-        j _test_end;
+        csrr  t1, mepc          # 读取异常PC
+        addi  t1, t1, 4         # PC+4（RISC-V指令长度为4字节）
+        csrw  mepc, t1          # 更新异常返回地址
+
+        # 5. 返回并继续执行
+        mret                   # 从异常返回（跳转到mepc地址）
+
 reset_vector:
         csrwi mstatus, 0;
         RISCV_MULTICORE_DISABLE;
@@ -63,7 +64,8 @@ reset_vector:
                 (1 << CAUSE_USER_ECALL) | \
                 (1 << CAUSE_BREAKPOINT);
         csrs medeleg, t0;
-  1:    li a0, (MSTATUS_FS & (MSTATUS_FS >> 0));
+  1:    li a0, (MSTATUS_FS & (MSTATUS_FS >> 0)) | \
+                (MSTATUS_MPP & (MSTATUS_MPP >> 0));
         csrs mstatus, a0;
         init_mie;
         csrwi fcsr, 0;
@@ -71,7 +73,7 @@ reset_vector:
         csrw minstret,zero
         csrr a0, mhartid;
 _fuzz_prefix:
-        /* Fuzz prefix */
+        /* Fuzz前缀 */
         /**/
 _end_prefix:
         la t0, main;
@@ -84,22 +86,34 @@ _end_prefix:
 
 main:
 _fuzz_main:
-        /* Fuzz main */
+        /* Fuzz主体 */
         /**/
-// RVTEST_CODE_END
-        ecall
-        unimp
-_end_main:
-        unimp
-        unimp
-        unimp
-        unimp
-        unimp
-        unimp
-        unimp
-        unimp
+        // 这里插入fuzzing生成的指令
+
+_good_exit:
+        DUMP_REGS
+        /* 程序结束处理 - 兼容Spike和香山 */
+        li a0, 0             # 设置a0=0表示正常退出 (HIT GOOD TRAP)
+        li TESTEND, 1
+        sw TESTEND, tohost, t5;
+        .word 0x5006b        # 香山trap指令 (0x5006b)
         
-    .data
+        /* 安全停止 */
+        1: j 1b
+_bad_exit:
+        li a0, 1             # 设置a0=0表示正常退出 (HIT GOOD TRAP)
+        li TESTEND, 5
+        sw TESTEND, tohost, t5;
+        .word 0x5006b        # 香山trap指令 (0x5006b)
+        
+        /* 安全停止 */
+        1: j 1b
+
+// RVTEST_CODE_END
+_end_main:
+
+
+.data
 
 RVTEST_DATA_BEGIN
 

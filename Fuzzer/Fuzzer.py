@@ -51,9 +51,10 @@ def Run(
     if multicore:
         yield manager.cov_restore(dut)
 
-    for it in range(num_iter):
-        debug_print("[DifuzzRTL] Iteration [{}]".format(it), debug)
-
+    it = 0
+    while True:
+        if it >= num_iter:
+            break
         if multicore:
             if it == 0:
                 mutator.update_corpus(out + "/corpus", 1000)
@@ -67,13 +68,14 @@ def Run(
         if in_file:
             (sim_input, data, assert_intr) = mutator.read_siminput(in_file)
         else:
-            (sim_input, data) = mutator.get(assert_intr)
+            (sim_input, data, generator_name) = mutator.get(assert_intr)
 
         if debug:
             print("[DifuzzRTL] Fuzz Instructions")
             for inst, INT in zip(sim_input.get_insts(), sim_input.ints + [0]):
                 print("{:<50}{:04b}".format(inst, INT))
 
+        print("[DifuzzRTL] Fuzz processing")
         (isa_input, rtl_input, symbols) = preprocessor.process(
             sim_input, data, assert_intr
         )
@@ -81,6 +83,7 @@ def Run(
         if isa_input and rtl_input:
             ret = run_isa_test(isaHost, isa_input, stop, out, proc_num)
             if ret == proc_state.ERR_ISA_TIMEOUT:
+                print("[DifuzzISA] Fuzz run_isa_test TIMEOUT")
                 continue
             elif ret == proc_state.ERR_ISA_ASSERT:
                 break
@@ -105,6 +108,7 @@ def Run(
 
             cause = "-"
             match = False
+
             if ret == SUCCESS:
                 match = checker.check(symbols)
             elif ret == ILL_MEM:
@@ -133,10 +137,14 @@ def Run(
                 mNum += 1
                 if ret == TIME_OUT:
                     cause = "Timeout"
+                    print("[DifuzzRTL] Fuzz Timeout")
+                    continue
                 elif ret == ASSERTION_FAIL:
                     cause = "Assertion fail"
+                    print("[DifuzzRTL] Fuzz ASSERTION_FAIL")
                 else:
                     cause = "Mismatch"
+                    print("[DifuzzRTL] Fuzz Mismatch")
 
                 debug_print(
                     "[DifuzzRTL] Bug -- {} [{}]".format(mNum, cause),
@@ -144,7 +152,10 @@ def Run(
                     not match or (ret != SUCCESS),
                 )
 
+            print("[DifuzzRTL] coverage: ", coverage)
             if coverage > last_coverage:
+                debug_print("[DifuzzRTL] Iteration [{}]".format(it), debug)
+                print("[DifuzzRTL] Iteration [{}]".format(it))
                 if multicore:
                     cNum = manager.read_num("cNum")
                     manager.write_num("cNum", cNum + 1)
@@ -159,8 +170,17 @@ def Run(
                             start_cov + coverage,
                         ),
                     )
-                    sim_input.save(out + "/corpus/id_{}.si".format(cNum))
-
+                    save_mismatch(
+                        out,
+                        proc_num,
+                        out + "/corpus",
+                        sim_input,
+                        data,
+                        cNum,
+                        generator_name,
+                    )
+                    # sim_input.save(out + "/corpus/id_{}.si".format(cNum))
+                it += 1
                 cNum += 1
                 mutator.add_corpus(sim_input)
                 last_coverage = coverage

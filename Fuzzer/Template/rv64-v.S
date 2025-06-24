@@ -1,11 +1,7 @@
-# Assembly file template for fuzzing
-
 #*********************************************************************
-# rv64-p-u.S
+# rv64-v.S (修改版)
 #---------------------------------------------------------------------
-
 #include "riscv_test.h"
-#include "test_macros.h"
 #include "fuzz_test.h"
 
 #define TESTEND gp
@@ -13,94 +9,161 @@
 RVTEST_RV64UF
 
 // RVTEST_CODE_BEGIN
-        .section .text.init;
-        .align  6;
-        .weak stvec_handler;
-        .weak mtvec_handler;
-        .global _start;
+.section .text.init;
+.align  6;
+.weak stvec_handler;
+.weak mtvec_handler;
+.global _start;
 _start:
-        /* reset vector */
-INIT_XREGS
-        j reset_vector;
-        .align;
+    INIT_XREGS
+    j reset_vector;
+    .align;
 init_freg:
-INIT_FREGS
-        ret
-        .align;
+    INIT_FREGS
+    ret
+    .align;
 trap_stvec:
-        clear_sie;
+    clear_sie;
 _fuzz_suffix:
-        /* Fuzz suffix */
-        /**/
+    /**/
 _end_suffix:
-        ecall
-trap_mtvec: 
-        clear_mie;
+    csrr  t1, sepc
+    addi  t1, t1, 4
+    csrw  sepc, t1
+    addi sp, sp, 32
+    sret
 
-  DUMP_REGS
-        
-  write_tohost:
-        li TESTEND, 1
-        sw TESTEND, tohost, t5;
-  _test_end:
-        j _test_end;
+.align 4;
+trap_mtvec: 
+    clear_mie
+    csrr  t1, mepc
+    addi  t1, t1, 4
+    csrw  mepc, t1
+    addi sp, sp, 32
+    mret
+
+.align 4;
+trap_hsvec:
+    csrr t0, scause
+    li t1, CAUSE_FETCH_PAGE_FAULT
+    beq t0, t1, handle_vm_fault
+    li t1, CAUSE_LOAD_PAGE_FAULT
+    beq t0, t1, handle_vm_fault
+    li t1, CAUSE_STORE_PAGE_FAULT
+    beq t0, t1, handle_vm_fault
+    
+    # 其他异常处理
+    j _fuzz_suffix
+
+handle_vm_fault:
+    # 简化处理：跳过错误指令
+    csrr t0, sepc
+    addi t0, t0, 4
+    csrw sepc, t0
+    sret
+
 reset_vector:
-        csrwi mstatus, 0;
-        RISCV_MULTICORE_DISABLE;
-        DELEGATE_NO_TRAPS;
-        INIT_SATP;
-        INIT_PMP;
-        la t0, trap_mtvec;
-        csrw mtvec, t0;
-        li TESTEND, 0;
-        CHECK_XLEN;
-        la t0, trap_stvec;
-        csrw stvec, t0;
-        li t0, (1 << CAUSE_LOAD_PAGE_FAULT) | \
-                (1 << CAUSE_STORE_PAGE_FAULT) | \
-                (1 << CAUSE_FETCH_PAGE_FAULT) | \
-                (1 << CAUSE_MISALIGNED_FETCH) | \
-                (1 << CAUSE_USER_ECALL) | \
-                (1 << CAUSE_BREAKPOINT);
-        csrs medeleg, t0;
-  1:    li a0, (MSTATUS_FS & (MSTATUS_FS >> 0));
-        csrs mstatus, a0;
-        init_mie;
-        csrwi fcsr, 0;
-        call init_freg
-        csrw minstret,zero
-        csrr a0, mhartid;
+    csrwi mstatus, 0
+    RISCV_MULTICORE_DISABLE
+    DELEGATE_NO_TRAPS
+    INIT_SATP
+    INIT_PMP
+    la t0, trap_mtvec
+    csrw mtvec, t0
+    li TESTEND, 0
+    CHECK_XLEN
+    
+    # 设置stvec为HS模式处理程序
+    la t0, trap_hsvec
+    csrw stvec, t0
+    
+    # 启用H扩展
+    li t0, MSTATUS_H
+    csrs mstatus, t0
+    
+    # 委托虚拟机异常到HS模式
+    li t0, (1 << CAUSE_LOAD_PAGE_FAULT) | \
+            (1 << CAUSE_STORE_PAGE_FAULT) | \
+            (1 << CAUSE_FETCH_PAGE_FAULT) | \
+            (1 << CAUSE_MISALIGNED_FETCH) | \
+            (1 << CAUSE_USER_ECALL) | \
+            (1 << CAUSE_BREAKPOINT)
+    csrs medeleg, t0
+    
+    # 初始化hgatp（G-stage页表）
+    li t0, 0x80000000  # 假设的GPA基址
+    slli t0, t0, 44
+    ori t0, t0, 8      # Sv48x4模式
+    csrw hgatp, t0
+    
+    # 设置虚拟机入口点
+    la t0, vm_entry
+    csrw mepc, t0
+    # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+    li a0, (MSTATUS_FS & (MSTATUS_FS >> 0))
+    csrs mstatus, a0
+    init_mie
+    csrwi fcsr, 0
+    call init_freg
+    csrw minstret,zero
+    csrr a0, mhartid
+    
 _fuzz_prefix:
-        /* Fuzz prefix */
-        /**/
+    /**/
 _end_prefix:
-        la t0, main;
-        csrw mepc, t0;
-        addi t0, zero, 0;
-        mret;
-  1:
-      
-      .align 6;
+    addi t0, zero, 0
+    mret
+
+# ▼▼▼▼▼▼▼ 关键修改3：新增虚拟机入口点 ▼▼▼▼▼▼▼
+.align 6
+vm_entry:
+    # 进入HS模式
+    li t0, MSTATUS_SPP
+    csrc mstatus, t0
+    li t0, (1 << MSTATUS_SPIE_SHIFT)
+    csrs mstatus, t0
+    
+    la t0, vm_main
+    csrw mepc, t0
+    mret
+
+.align 6
+vm_main:
+    # 配置虚拟机环境
+    li t0, (SSTATUS_SPP | SSTATUS_SPIE)
+    csrs sstatus, t0
+    
+    # 设置VS-mode satp
+    li t0, 0x80000000  # 假设的VS-stage页表基址
+    slli t0, t0, 44
+    ori t0, t0, 9      # Sv48模式
+    csrw satp, t0
+    sfence.vma
+    
+    # 进入VU模式
+    la t0, main
+    csrw sepc, t0
+    li t0, SSTATUS_SPP
+    csrc sstatus, t0
+    sret
+# ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
 main:
 _fuzz_main:
-        /* Fuzz main */
-        /**/
-// RVTEST_CODE_END
-        ecall
-        unimp
-_end_main:
-        unimp
-        unimp
-        unimp
-        unimp
-        unimp
-        unimp
-        unimp
-        unimp
-        
-    .data
+    /**/
+    
+_good_exit:
+    li a0, 0
+    li TESTEND, 1
+    sw TESTEND, tohost, t5
+    .word 0x5006b
+    1: j 1b
 
+// RVTEST_CODE_END
+_end_main:
+
+.data
 RVTEST_DATA_BEGIN
 
         .align 8
@@ -285,5 +348,3 @@ _end_data4:
 _random_data5:
          /* Random data */
 _end_data5:
-              
-                 

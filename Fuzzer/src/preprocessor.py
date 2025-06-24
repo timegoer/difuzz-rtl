@@ -9,12 +9,15 @@ from mutator import simInput, templates, P_M, P_S, P_U, V_U
 
 
 class rvPreProcessor:
-    def __init__(self, cc, elf2hex, template="Template", out_base=".", proc_num=0):
+    def __init__(
+        self, cc, elf2hex, objdump, template="Template", out_base=".", proc_num=0
+    ):
         self.cc = cc
         self.elf2hex = elf2hex
         self.template = template
         self.base = out_base
         self.proc_num = proc_num
+        self.objdump = objdump
 
         self.er_num = 0
         self.cc_args = [
@@ -33,6 +36,7 @@ class rvPreProcessor:
         ]
 
         self.elf2hex_args = [elf2hex, "--bit-width", "64", "--input"]
+        self.objdump_args = [objdump, "-O", "binary"]
 
     def get_symbols(self, elf_name, sym_name):
         # symbol_file = self.base + '/.input.symbols'
@@ -96,6 +100,7 @@ class rvPreProcessor:
         si_name = self.base + "/.input_{}.si".format(self.proc_num)
         asm_name = self.base + "/.input_{}.S".format(self.proc_num)
         elf_name = self.base + "/.input_{}.elf".format(self.proc_num)
+        bin_name = self.base + "/.input_{}.bin".format(self.proc_num)
         hex_name = self.base + "/.input_{}.hex".format(self.proc_num)
         sym_name = self.base + "/.input_{}.symbols".format(self.proc_num)
         rtl_intr_name = self.base + "/.input_{}.rtl.intr".format(self.proc_num)
@@ -158,7 +163,7 @@ class rvPreProcessor:
         fd.close()
 
         cc_args = self.cc_args + extra_args + [asm_name, "-o", elf_name]
-
+        objdump_args = self.objdump_args + [elf_name, bin_name]
         cc_ret = -1
         while True:
             cc_ret = subprocess.call(cc_args)
@@ -171,6 +176,7 @@ class rvPreProcessor:
 
             elf2hex_args = self.elf2hex_args + [elf_name, "--output", hex_name]
             subprocess.call(elf2hex_args)
+            subprocess.call(objdump_args)
             symbols = self.get_symbols(elf_name, sym_name)
 
             if intr:

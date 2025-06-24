@@ -2,7 +2,20 @@ import os
 import random
 from copy import deepcopy
 
-from inst_generator import Word, rvInstGenerator, PREFIX, MAIN, SUFFIX
+from inst_generator import (
+    CounterTimerGenerator,
+    ExceptionGenerator,
+    InterruptGenerator,
+    RandSwitchGenerator,
+    Word,
+    RandomInstGenerator,
+    IllLow2highGenerator,
+    M2SLegalSwitchGenerator,
+    S2ULegalSwitchGenerator,
+    PREFIX,
+    MAIN,
+    SUFFIX,
+)
 
 """ Mutation phases """
 GENERATION = 0
@@ -18,7 +31,7 @@ P_U = 2
 # V_S = 3
 V_U = 3
 
-templates = ["p-m", "p-s", "p-u", "v-u"]
+templates = ["m", "s", "u", "v-u"]
 
 
 class simInput:
@@ -99,25 +112,42 @@ class simInput:
 
 
 class rvMutator:
-    def __init__(self, max_data_seeds=100, corpus_size=100, no_guide=False):
+    def __init__(self, max_data_seeds=100, corpus_size=1000, no_guide=False):
         self.corpus_size = corpus_size
         self.corpus = []
 
         self.phases = [GENERATION, MUTATION, MERGE]
         self.phase = GENERATION
 
-        self.num_prefix = 3
+        self.num_prefix = 0
         self.num_words = 100
-        self.num_suffix = 5
+        self.num_suffix = 10
 
-        self.max_nWords = 200
+        self.max_nWords = 2000
         self.no_guide = no_guide
 
         self.max_data = max_data_seeds
         self.random_data = {}
         self.data_seeds = []
+        # self.generator_weights = [1, 5]
+        # # self.inst_generator = RandomInstGenerator("RV64G")
+        # self.inst_generators = [
+        #     IllLow2highGenerator("RV64G"),
+        #     RandomInstGenerator("RV64G"),
+        # ]
 
-        self.inst_generator = rvInstGenerator("RV64G")
+    def inst_generator(self, seed=0):
+        generator_list = [
+            CounterTimerGenerator("RV64G"),
+            ExceptionGenerator("RV64G"),
+            InterruptGenerator("RV64G"),
+            RandSwitchGenerator("RV64G"),
+            RandomInstGenerator("RV64G"),
+            IllLow2highGenerator("RV64G"),
+            M2SLegalSwitchGenerator("RV64G"),
+            S2ULegalSwitchGenerator("RV64G"),
+        ]
+        return random.choice(generator_list)
 
     def add_data(self, new_data=[]):
         if len(self.data_seeds) == self.max_data:
@@ -369,13 +399,25 @@ class rvMutator:
 
         for word in seed_words:
             rand = random.random()
-            if rand < 0.5:
+            if rand < 0.7:
                 words.append(word)
             elif rand < 0.75:
                 words.append(word)
-                new_word = self.inst_generator.get_word(part)
+                k = random.randint(0, 10)
+                while k > 0:
+                    new_word = self.inst_generator().get_word(part)
+                    words.append(new_word)
+                    k -= 1
+            elif rand < 0.8:
+                new_word = self.inst_generator().get_word(part)
                 words.append(new_word)
-
+            elif rand < 0.85:
+                words.clear()
+            elif rand < 0.9:
+                words.append(word)
+                random.shuffle(words)
+            else:
+                words.insert(random.randint(0, len(words)), word)
         words = words[0:max_num]
         words = self.reset_labels(words, part)
 
@@ -387,20 +429,21 @@ class rvMutator:
         words = []
         suffix = []
 
-        self.inst_generator.reset()
+        generator = self.inst_generator()
+        generator.reset()
 
         data_seed = -1
-        template = -1
+        template = random.choice(generator.templates)
         if self.phase == GENERATION:
             print("[rvMutator] phase GENERATION")
             for n in range(self.num_prefix):
-                word = self.inst_generator.get_word(PREFIX)
+                word = generator.get_word(PREFIX)
                 prefix.append(word)
             for n in range(self.num_words):
-                word = self.inst_generator.get_word(MAIN)
+                word = generator.get_word(MAIN)
                 words.append(word)
             for n in range(self.num_suffix):
-                word = self.inst_generator.get_word(SUFFIX)
+                word = generator.get_word(SUFFIX)
                 suffix.append(word)
 
         elif self.phase in [MUTATION, MERGE]:
@@ -436,15 +479,15 @@ class rvMutator:
             suffix = self.mutate_words(seed_suffix, SUFFIX, self.num_suffix)
 
         for word in prefix:
-            self.inst_generator.populate_word(word, len(prefix), PREFIX)
+            generator.populate_word(word, len(prefix), PREFIX)
 
         max_label = len(words)
         for word in words:
             i_len += word.len_insts
-            self.inst_generator.populate_word(word, max_label, MAIN)
+            generator.populate_word(word, max_label, MAIN)
 
         for word in suffix:
-            self.inst_generator.populate_word(word, len(suffix), SUFFIX)
+            generator.populate_word(word, len(suffix), SUFFIX)
 
         ints = [0 for i in range(i_len)]
         if assert_intr:
@@ -456,17 +499,13 @@ class rvMutator:
             data_seed = self.add_data()
         else:
             self.update_data_seeds(data_seed)
-
-        if template == -1:
-            template = random.randint(0, P_U)
-
         sim_input = simInput(prefix, words, suffix, ints, data_seed, template)
         data = self.random_data[data_seed]
 
-        return (sim_input, data)
+        return (sim_input, data, type(generator).__name__)
 
     def update_phase(self, it):
-        if it < self.corpus_size / 10 or self.no_guide:
+        if it < self.corpus_size / 100 or self.no_guide:
             self.phase = GENERATION
         else:
             rand = random.random()

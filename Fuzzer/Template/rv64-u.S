@@ -1,7 +1,5 @@
-# Assembly file template for fuzzing
-
 #*********************************************************************
-# rv64-p-u.S
+# rv64-u.S
 #---------------------------------------------------------------------
 
 #include "riscv_test.h"
@@ -19,7 +17,7 @@ RVTEST_RV64UF
         .weak mtvec_handler;
         .global _start;
 _start:
-        /* reset vector */
+        /* 重置向量 */
 INIT_XREGS
         j reset_vector;
         .align;
@@ -30,20 +28,27 @@ INIT_FREGS
 trap_stvec:
         clear_sie;
 _fuzz_suffix:
-        /* Fuzz suffix */
+        /* Fuzz后缀 - 可以在此处插入自定义异常处理代码 */
         /**/
 _end_suffix:
-        ecall
+        csrr  t1, sepc          # 读取异常PC
+        addi  t1, t1, 4         # PC+4（RISC-V指令长度为4字节）
+        csrw  sepc, t1          # 更新异常返回地址
+        addi sp, sp, 32
+        sret
+        /* 机器模式异常处理 */
+        .align 4;
 trap_mtvec: 
-        clear_mie;
-
-  DUMP_REGS
+        clear_mie;   // 禁用中断
         
-  write_tohost:
-        li TESTEND, 1
-        sw TESTEND, tohost, t5;
-  _test_end:
-        j _test_end;
+        csrr  t1, mepc          # 读取异常PC
+        addi  t1, t1, 4         # PC+4（RISC-V指令长度为4字节）
+        csrw  mepc, t1          # 更新异常返回地址
+        addi sp, sp, 32
+        
+        /* 返回并继续执行 */
+        mret
+
 reset_vector:
         csrwi mstatus, 0;
         RISCV_MULTICORE_DISABLE;
@@ -71,7 +76,7 @@ reset_vector:
         csrw minstret,zero
         csrr a0, mhartid;
 _fuzz_prefix:
-        /* Fuzz prefix */
+        /* Fuzz前缀 - 可以在此处插入自定义初始化代码 */
         /**/
 _end_prefix:
         la t0, main;
@@ -84,22 +89,23 @@ _end_prefix:
 
 main:
 _fuzz_main:
-        /* Fuzz main */
+        /* Fuzz主体 - 此处插入fuzzing生成的指令 */
         /**/
-// RVTEST_CODE_END
-        ecall
-        unimp
-_end_main:
-        unimp
-        unimp
-        unimp
-        unimp
-        unimp
-        unimp
-        unimp
-        unimp
         
-    .data
+        /* 程序结束处理 - 兼容Spike和香山 */
+_good_exit:
+        li a0, 0             # 设置a0=0表示正常退出 (HIT GOOD TRAP)
+        li TESTEND, 1
+        sw TESTEND, tohost, t5;
+        .word 0x5006b        # 香山trap指令 (0x5006b)
+        
+        /* 安全停止 */
+        1: j 1b
+
+// RVTEST_CODE_END
+_end_main:
+
+.data
 
 RVTEST_DATA_BEGIN
 
@@ -286,4 +292,3 @@ _random_data5:
          /* Random data */
 _end_data5:
               
-                 
