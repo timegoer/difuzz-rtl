@@ -2,10 +2,15 @@ import os
 import random
 from copy import deepcopy
 
+from config import GENERATOR_SELECTOR
 from inst_generator import (
+    BitmaprGenerator,
+    CBOGenerator,
     CounterTimerGenerator,
     ExceptionGenerator,
+    HyperviserGenerator,
     InterruptGenerator,
+    MptGenerator,
     RandSwitchGenerator,
     Word,
     RandomInstGenerator,
@@ -30,8 +35,9 @@ P_U = 2
 # V_M = 3
 # V_S = 3
 V_U = 3
+PT = 4
 
-templates = ["m", "s", "u", "v-u"]
+templates = ["m", "s", "u", "v", "pt"]
 
 
 class simInput:
@@ -112,7 +118,7 @@ class simInput:
 
 
 class rvMutator:
-    def __init__(self, max_data_seeds=100, corpus_size=1000, no_guide=False):
+    def __init__(self, max_data_seeds=100, corpus_size=100, no_guide=False):
         self.corpus_size = corpus_size
         self.corpus = []
 
@@ -120,21 +126,15 @@ class rvMutator:
         self.phase = GENERATION
 
         self.num_prefix = 0
-        self.num_words = 100
-        self.num_suffix = 10
+        self.num_words = 200
+        self.num_suffix = 0
 
-        self.max_nWords = 2000
+        self.max_nWords = 20000
         self.no_guide = no_guide
 
         self.max_data = max_data_seeds
         self.random_data = {}
         self.data_seeds = []
-        # self.generator_weights = [1, 5]
-        # # self.inst_generator = RandomInstGenerator("RV64G")
-        # self.inst_generators = [
-        #     IllLow2highGenerator("RV64G"),
-        #     RandomInstGenerator("RV64G"),
-        # ]
 
     def inst_generator(self, seed=0):
         generator_list = [
@@ -146,8 +146,12 @@ class rvMutator:
             IllLow2highGenerator("RV64G"),
             M2SLegalSwitchGenerator("RV64G"),
             S2ULegalSwitchGenerator("RV64G"),
+            HyperviserGenerator("RV64G"),
+            BitmaprGenerator("RV64G"),
+            MptGenerator("RV64G"),
+            CBOGenerator("RV64G"),
         ]
-        return random.choice(generator_list)
+        return random.choices(generator_list, GENERATOR_SELECTOR)[0]
 
     def add_data(self, new_data=[]):
         if len(self.data_seeds) == self.max_data:
@@ -411,8 +415,9 @@ class rvMutator:
             elif rand < 0.8:
                 new_word = self.inst_generator().get_word(part)
                 words.append(new_word)
-            elif rand < 0.85:
+            elif rand < 0.82:
                 words.clear()
+                words.append(word)
             elif rand < 0.9:
                 words.append(word)
                 random.shuffle(words)
@@ -502,7 +507,7 @@ class rvMutator:
         sim_input = simInput(prefix, words, suffix, ints, data_seed, template)
         data = self.random_data[data_seed]
 
-        return (sim_input, data, type(generator).__name__)
+        return (sim_input, data, type(generator).__name__.lower())
 
     def update_phase(self, it):
         if it < self.corpus_size / 100 or self.no_guide:

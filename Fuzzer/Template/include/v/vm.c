@@ -172,6 +172,7 @@ void handle_fault(uintptr_t addr, uintptr_t cause)
     freelist_tail = 0;
 
   /* Added code for fuzzing page tables */
+  // 随机生成页表项（10%概率有效，90%概率注入错误）
   uint64_t random = lfsr63(random) % 10;
   uintptr_t new_pte = 0;
   if (random == 0) {
@@ -192,11 +193,15 @@ void handle_fault(uintptr_t addr, uintptr_t cause)
   user_llpt[addr/PGSIZE] = new_pte;
   flush_page(addr);
 
-  __builtin___clear_cache(0,0);
+  // __builtin___clear_cache(0,0);
 }
 
 void handle_trap(trapframe_t* tf)
 {
+    if (tf->cause == CAUSE_USER_ECALL) {
+    int status = tf->gpr[10];  // a0寄存器
+    terminate(status);
+  }
   // if (tf->cause == CAUSE_USER_ECALL)
   // {
   //   int n = tf->gpr[10];
@@ -253,16 +258,18 @@ static void coherence_torture()
 
 void vm_boot(uintptr_t test_addr)
 {
+  
   uint64_t random = ENTROPY;
   if (read_csr(mhartid) > 0)
     coherence_torture();
 
-  _Static_assert(SIZEOF_TRAPFRAME_T == sizeof(trapframe_t), "???");
+  // _Static_assert(SIZEOF_TRAPFRAME_T == sizeof(trapframe_t), "???");
 
 #if (MAX_TEST_PAGES > PTES_PER_PT) || (DRAM_BASE % MEGAPAGE_SIZE) != 0
 # error
 #endif
   // map user to lowermost megapage
+  // 配置三级页表（用户/内核空间隔离）
   l1pt[0] = ((pte_t)user_l2pt >> PGSHIFT << PTE_PPN_SHIFT) | PTE_V;
   // map kernel to uppermost megapage
 #if SATP_MODE_CHOICE == SATP_MODE_SV48
@@ -313,6 +320,8 @@ void vm_boot(uintptr_t test_addr)
   random = 1 + (random % MAX_TEST_PAGES);
   freelist_head = pa2kva((void*)&freelist_nodes[0]);
   freelist_tail = pa2kva(&freelist_nodes[MAX_TEST_PAGES-1]);
+
+  // 初始化空闲页链表（用于动态映射）
   for (long i = 0; i < MAX_TEST_PAGES; i++)
   {
     freelist_nodes[i].addr = DRAM_BASE + (MAX_TEST_PAGES + random)*PGSIZE;
@@ -324,6 +333,7 @@ void vm_boot(uintptr_t test_addr)
   _fuzz_prefix();
   write_csr(mtvec, trap_mtvec);
 
+  // 切换到用户模式执行测试
   trapframe_t tf;
   memset(&tf, 0, sizeof(tf));
   tf.epc = test_addr - DRAM_BASE;

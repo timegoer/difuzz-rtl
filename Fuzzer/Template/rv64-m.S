@@ -27,8 +27,10 @@ INIT_FREGS
         .align;
 trap_stvec:
         clear_sie;
-        ecall
-        
+        csrr t1, sepc
+        addi t1, t1, 4
+        csrw sepc, t1
+        sret
         /* 机器模式异常处理 */
         .align 4;
 trap_mtvec: 
@@ -58,12 +60,12 @@ reset_vector:
         la t0, trap_stvec;
         csrw stvec, t0;
         li t0, (1 << CAUSE_LOAD_PAGE_FAULT) | \
-                (1 << CAUSE_STORE_PAGE_FAULT) | \
-                (1 << CAUSE_FETCH_PAGE_FAULT) | \
-                (1 << CAUSE_MISALIGNED_FETCH) | \
-                (1 << CAUSE_USER_ECALL) | \
-                (1 << CAUSE_BREAKPOINT);
-        csrs medeleg, t0;
+            (1 << CAUSE_STORE_PAGE_FAULT) | \
+            (1 << CAUSE_FETCH_PAGE_FAULT) | \
+            (1 << CAUSE_MISALIGNED_FETCH) | \
+            (1 << CAUSE_USER_ECALL) | \
+            (1 << CAUSE_BREAKPOINT);
+     csrs medeleg, t0;
   1:    li a0, (MSTATUS_FS & (MSTATUS_FS >> 0)) | \
                 (MSTATUS_MPP & (MSTATUS_MPP >> 0));
         csrs mstatus, a0;
@@ -94,24 +96,23 @@ _good_exit:
         DUMP_REGS
         /* 程序结束处理 - 兼容Spike和香山 */
         li a0, 0             # 设置a0=0表示正常退出 (HIT GOOD TRAP)
+        .word 0x5006b        # 香山trap指令 (0x5006b)
         li TESTEND, 1
         sw TESTEND, tohost, t5;
-        .word 0x5006b        # 香山trap指令 (0x5006b)
-        
-        /* 安全停止 */
-        1: j 1b
-_bad_exit:
-        li a0, 1             # 设置a0=0表示正常退出 (HIT GOOD TRAP)
-        li TESTEND, 5
-        sw TESTEND, tohost, t5;
-        .word 0x5006b        # 香山trap指令 (0x5006b)
         
         /* 安全停止 */
         1: j 1b
 
 // RVTEST_CODE_END
 _end_main:
-
+        unimp
+        unimp
+        unimp
+        unimp
+        unimp
+        unimp
+        unimp
+        unimp
 
 .data
 
@@ -300,4 +301,6 @@ _random_data5:
          /* Random data */
 _end_data5:
               
+                 
+
                  

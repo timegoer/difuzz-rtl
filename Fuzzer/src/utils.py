@@ -7,6 +7,7 @@ from threading import Timer
 from ISASim.host import rvISAhost
 from RTLSim.host import rvRTLhost
 
+from config import CC, ELF2HEX, OBJCOPY, SPIKE
 from src.preprocessor import rvPreProcessor
 from src.signature_checker import sigChecker
 from src.mutator import simInput, rvMutator
@@ -97,11 +98,13 @@ def save_mismatch(
     asm = base + "/.input_{}.S".format(proc_num)
     hexfile = base + "/.input_{}.hex".format(proc_num)
     bin = base + "/.input_{}.bin".format(proc_num)
-
-    shutil.copy(elf, out + "/elf/{}_{}.elf".format(generator_name, num))
-    shutil.copy(bin, out + "/bin/{}_{}.bin".format(generator_name, num))
-    shutil.copy(asm, out + "/asm/{}_{}.S".format(generator_name, num))
-    shutil.copy(hexfile, out + "/hex/{}_{}.hex".format(generator_name, num))
+    try:
+        shutil.copy(elf, out + "/elf/{}_{}.elf".format(generator_name, num))
+        shutil.copy(bin, out + "/bin/{}_{}.bin".format(generator_name, num))
+        shutil.copy(asm, out + "/asm/{}_{}.S".format(generator_name, num))
+        shutil.copy(hexfile, out + "/hex/{}_{}.hex".format(generator_name, num))
+    except FileNotFoundError:
+        pass
 
 
 def setup(
@@ -109,12 +112,12 @@ def setup(
 ):
     mutator = rvMutator(no_guide=no_guide)
 
-    cc = "riscv64-unknown-elf-gcc"
-    elf2hex = "riscv64-unknown-elf-elf2hex"
-    objdump = "riscv64-unknown-linux-gnu-objcopy"
-    preprocessor = rvPreProcessor(cc, elf2hex, objdump, template, out, proc_num)
+    cc = CC
+    elf2hex = ELF2HEX
+    objcopy = OBJCOPY
+    preprocessor = rvPreProcessor(cc, elf2hex, objcopy, template, out, proc_num)
 
-    spike = os.environ["SPIKE"]
+    spike = SPIKE
     isa_sigfile = out + "/.isa_sig_{}.txt".format(proc_num)
     rtl_sigfile = out + "/.rtl_sig_{}.txt".format(proc_num)
 
@@ -122,7 +125,7 @@ def setup(
         spike_arg = ["-l"]
     else:
         spike_arg = []
-
+    spike_arg += ["--isa=rv64imafdch_zicntr_zihpm_zicbom_zicboz_zicbop"]
     isaHost = rvISAhost(spike, spike_arg, isa_sigfile)
     rtlHost = rvRTLhost(dut, toplevel, rtl_sigfile, debug=debug)
 

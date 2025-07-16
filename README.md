@@ -41,7 +41,7 @@ git clone https://github.com/compsec-snu/difuzz-rtl
 cd DifuzzRTL
 git checkout sim
 
-. ./setup.sh
+./setup.sh
 
 cd elf2hex
 cp elf2hex ~/local/bin/riscv64-unknown-elf-elf2hex

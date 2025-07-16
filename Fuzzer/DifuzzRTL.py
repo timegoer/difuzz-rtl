@@ -99,6 +99,14 @@ if not os.path.isdir(out + "/corpus"):
     os.makedirs(out + "/corpus/hex")
     os.makedirs(out + "/corpus/bin")
 
+if not os.path.isdir(out + "/emu_mismatch"):
+    os.makedirs(out + "/emu_mismatch")
+    os.makedirs(out + "/emu_mismatch/sim_input")
+    os.makedirs(out + "/emu_mismatch/elf")
+    os.makedirs(out + "/emu_mismatch/asm")
+    os.makedirs(out + "/emu_mismatch/hex")
+    os.makedirs(out + "/emu_mismatch/bin")
+
 date = datetime.today().strftime("%Y%m%d")
 cov_log = out + "/cov_log_{}.txt".format(date)
 if (multicore or record) and not os.path.isfile(cov_log):

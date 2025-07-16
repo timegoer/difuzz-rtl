@@ -27,11 +27,15 @@ INIT_FREGS
         .align;
 trap_stvec:
         clear_sie;
+        csrr t1, sepc
+        addi t1, t1, 4
+        csrw sepc, t1
 _fuzz_suffix:
         /* Fuzz trap - 可以在此处插入自定义的异常处理代码 */
         /**/
 _end_suffix:
-        ecall
+        sret
+
         
         /* 机器模式异常处理 */
         .align 4;
@@ -93,9 +97,9 @@ _good_exit:
         /* 程序结束处理 - 兼容Spike和香山 */
         DUMP_REGS
         li a0, 0             # 设置a0=0表示正常退出 (HIT GOOD TRAP)
+        .word 0x5006b        # 香山trap指令 (0x5006b)
         li TESTEND, 1
         sw TESTEND, tohost, t5;
-        .word 0x5006b        # 香山trap指令 (0x5006b)
         
         /* 安全停止 */
         1: j 1b

@@ -48,11 +48,25 @@ _fuzz_prefix:
 _end_prefix:
     ret
 
+.align 4;
+trap_hsvec:
+    
+    # 其他异常处理
+    j trap_entry  
+
+handle_vm_fault:
+    # 简化处理：跳过错误指令
+    j handle_fault    # 跳转到C实现的缺页处理
+
 handle_reset:
 INIT_XREGS
 
   la t0, trap_mtvec 
   csrw mtvec, t0
+  la t0, trap_hsvec
+  csrw stvec, t0
+  li t0, 0x4
+  csrs mstatus, t0
   la sp, STACK_TOP - SIZEOF_TRAPFRAME_T
   csrr t0, mhartid
   slli t0, t0, 12
@@ -72,23 +86,18 @@ INIT_FREGS
 
   .global trap_stvec
 trap_stvec:
-        clear_sie;
 _fuzz_suffix:
         /* Fuzz trap */
         /**/
-_end_suffix:
-        ecall
+        j trap_entry
 
   .global trap_mtvec
 trap_mtvec:
         clear_mie;
-  DUMP_REGS
-
-   write_tohost:
-        li TESTEND, 1
-        sw TESTEND, tohost, t5;
-  _test_end:
-        j _test_end;
+        csrr  t1, mepc          # 读取异常PC
+        addi  t1, t1, 4         # PC+4（RISC-V指令长度为4字节）
+        csrw  mepc, t1          # 更新异常返回地址
+        mret
 
 
   .global pop_tf
@@ -169,7 +178,7 @@ trap_entry:
   STORE t0,32*REGBYTES(sp)
   csrr  t0,sepc
   STORE t0,33*REGBYTES(sp)
-  csrr  t0,sbadaddr
+  # csrr  t0,sbadaddr
   STORE t0,34*REGBYTES(sp)
   csrr  t0,scause
   STORE t0,35*REGBYTES(sp)
@@ -190,7 +199,15 @@ _fuzz_main:
         /* Fuzz main */
         /**/
 // RVTEST_CODE_END
+   write_tohost:
+        li a0, 0
         ecall
+        li a0, 0             # 设置a0=0表示正常退出 (HIT GOOD TRAP)
+        .word 0x5006b        # 香山trap指令 (0x5006b)
+        li TESTEND, 1
+        sw TESTEND, tohost, t5;
+  _test_end:
+        j _test_end;
         unimp
 _end_main:
         unimp

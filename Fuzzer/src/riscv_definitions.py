@@ -1702,10 +1702,42 @@ rv64q_rtype = {
     "fmv.q.x": ("fmv.q.x freg0, xreg0", ("xreg0",), ("freg0",), (), ()),
 }
 
+hv_instructions = {
+    # Hypervisor内存屏障指令
+    "hfence.vvma": ("hfence.vvma xreg0, xreg1", ("xreg0", "xreg1"), (), (), ()),
+    "hfence.gvma": ("hfence.gvma xreg0, xreg1", ("xreg0", "xreg1"), (), (), ()),
+    # Hypervisor加载指令
+    "hlv.b": ("hlv.b xreg0, (xreg1)", ("xreg0", "xreg1"), (), (), ()),
+    "hlv.bu": ("hlv.bu xreg0, (xreg1)", ("xreg0", "xreg1"), (), (), ()),
+    "hlv.h": ("hlv.h xreg0, (xreg1)", ("xreg0", "xreg1"), (), (), ()),
+    "hlv.hu": ("hlv.hu xreg0, (xreg1)", ("xreg0", "xreg1"), (), (), ()),
+    "hlv.w": ("hlv.w xreg0, (xreg1)", ("xreg0", "xreg1"), (), (), ()),
+    "hlv.d": ("hlv.d xreg0, (xreg1)", ("xreg0", "xreg1"), (), (), ()),
+    "hlvx.wu": ("hlvx.wu xreg0, (xreg1)", ("xreg0", "xreg1"), (), (), ()),
+    "hlvx.hu": ("hlvx.hu xreg0, (xreg1)", ("xreg0", "xreg1"), (), (), ()),
+    # Hypervisor存储指令
+    "hsv.b": ("hsv.b xreg0, (xreg1)", ("xreg0", "xreg1"), (), (), ()),
+    "hsv.h": ("hsv.h xreg0, (xreg1)", ("xreg0", "xreg1"), (), (), ()),
+    "hsv.d": ("hsv.d xreg0, (xreg1)", ("xreg0", "xreg1"), (), (), ()),
+    "hsv.w": ("hsv.w xreg0, (xreg1)", ("xreg0", "xreg1"), (), (), ()),
+    # "hsv.wu": ("hsv.wu xreg0, (xreg1)", ("xreg0", "xreg1"), (), (), ()),
+    "wfi": ("wfi", (), (), (), ()),
+}
+
 trap_ret = {
     "mret": ("mret", (), (), (), ()),
     "sret": ("sret", (), (), (), ()),
     "uret": ("uret", (), (), (), ()),
+}
+
+cbo_instructions = {
+    "cbo.clean": ("cbo.clean (xreg1)", ("xreg1",), (), (), ()),
+    "cbo.flush": ("cbo.flush (xreg1)", ("xreg1",), (), (), ()),
+    "cbo.inval": ("cbo.inval (xreg1)", ("xreg1",), (), (), ()),
+    "prefetch.i": ("prefetch.i imm12(xreg1)", ("xreg1",), (), (("imm12", 32),), ()),
+    "prefetch.r": ("prefetch.r imm12(xreg1)", ("xreg1",), (), (("imm12", 32),), ()),
+    "prefetch.w": ("prefetch.w imm12(xreg1)", ("xreg1",), (), (("imm12", 32),), ()),
+    "cbo.zero": ("cbo.zero (xreg1)", ("xreg1",), (), (), ()),
 }
 
 rv32i = {}
@@ -1878,6 +1910,16 @@ csr_names = (
     "pmpaddr7",
 )
 
+# m-mode
+# 0xBC2 mbmc
+csr_bitmap = ("0xBC2",)
+
+# m-mode
+# 0xBC3 mmpt
+csr_mpt = ("0xBC3",)
+
+csrs_cbo = ("menvcfg", "senvcfg", "henvcfg")
+
 counter_timers = (
     "cycle",
     "time",
@@ -1895,6 +1937,52 @@ counter_timers = (
     "hpmcounter3h",
     "hpmcounter4h",
     "hpmcounter31h",
+)
+
+hv_csrs = (
+    # Hypervisor Trap Setup
+    "hstatus",
+    "hedeleg",
+    "hideleg",
+    "hie",
+    "hcounteren",
+    "hgeie",
+    "hedelegh",
+    # Hypervisor Trap Handling
+    "htval",
+    "hip",
+    "hvip",
+    "htinst",
+    "hgeip",
+    # Hypervisor Configuration
+    "henvcfg",
+    "henvcfgh",
+    # Hypervisor Protection and Translation
+    "hgatp",
+    # Debug/Trace Registers
+    "hcontext",
+    # Hypervisor Counter/Timer Virtualization Registers
+    "htimedelta",
+    "htimedeltah",
+    # Hypervisor State Enable Registers
+    "hstateen0",
+    "hstateen1",
+    "hstateen2",
+    "hstateen3",
+    "hstateen0h",
+    "hstateen1h",
+    "hstateen2h",
+    "hstateen3h",
+    # Virtual Supervisor Registers
+    "vsstatus",
+    "vsie",
+    "vstvec",
+    "vsscratch",
+    "vsepc",
+    "vscause",
+    "vstval",
+    "vsip",
+    "vsatp",
 )
 # ['ustatus', 'uie', 'uepc', 'ucause', 'utval', 'uip']
 # ['sedeleg', 'sideleg']

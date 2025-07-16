@@ -203,37 +203,139 @@ def word_atomic(opcode, syntax, xregs, fregs, imms, symbols):
     return (tpe, insts)
 
 
-def word_csr_r(opcode, syntax, xregs, fregs, imms, symbols):
-    csr = random.choice(csr_names)
+def csr_randint(csr_name):
+    if csr_name in ["mstatus", "sstatus", "vsstatus"]:
+        # 状态寄存器: 组合关键标志位
+        mie = random.randint(0, 1) << 3  # 中断使能
+        mpie = random.randint(0, 1) << 7  # 先前中断状态
+        mpp = random.choice([0, 1, 3]) << 11  # 特权级
+        fs = random.choice([0, 1, 3]) << 13  # 浮点状态
+        sd = random.randint(0, 1) << 31  # 状态脏位
+        return mie | mpie | mpp | fs | sd
 
-    if "pmpaddr" in csr:
+    elif csr_name in ["mip", "sip", "vsip"]:
+        # 中断挂起寄存器: 设置随机中断位
+        return (
+            random.randint(0, 1)
+            | (random.randint(0, 1) << 1)
+            | (random.randint(0, 1) << 5)
+            | (random.randint(0, 1) << 9)
+        )
+
+    elif csr_name in ["mie", "sie", "vsie"]:
+        # 中断使能寄存器: 使能随机中断
+        return (
+            random.randint(0, 1)
+            | (random.randint(0, 1) << 3)
+            | (random.randint(0, 1) << 7)
+            | (random.randint(0, 1) << 11)
+        )
+
+    elif csr_name in ["hstatus", "vsstatus"]:
+        # Hypervisor状态寄存器: 关键位组合
+        spv = random.randint(0, 1) << 7  # 先前虚拟化状态
+        hu = random.randint(0, 1) << 9  # Hypervisor用户模式
+        vgein = random.randint(0, 63) << 18  # 虚拟中断号
+        return spv | hu | vgein
+
+    elif csr_name in ["satp", "vsatp"]:
+        # 地址转换寄存器: 模式+ASID+PPN
+        mode = random.choice([0, 8, 9]) << 60  # Sv39/Sv48模式
+        asid = random.randint(0, 0xFFFF) << 44
+        ppn = random.randint(0, 0xFFFFF)
+        return mode | asid | ppn
+
+    elif csr_name in ["0xBC2"]:
+        cmode = random.choice([0, 1])
+        b_clear = random.choice([0, 1]) << 1
+        bme = random.choices([0, 1], [0.1, 0.9])[0] << 2
+        bma = random.randint(0x800000000, 0xA00000000) << 3
+        return cmode | b_clear | bme | bma
+
+    elif csr_name in ["0xBC3"]:
+        MODE = random.choices([0, 1, 2, 3], [0.1, 0.3, 0.3, 0.3])[0]
+        if MODE == 0:
+            PPN = 0
+            SDID = 0
+        else:
+            PPN = 0x80032000
+            SDID = random.randint(0, 0x3F) << 54
+
+        return (MODE << 60) | PPN | SDID
+
+    elif csr_name in ["menvcfg", "senvcfg", "henvcfg"]:
+        CBIE = random.choice([0, 1, 3]) << 4
+        CBCFE = random.choice([0, 1]) << 6
+        CBZE = random.choice([0, 1]) << 7
+        return CBIE | CBCFE | CBZE
+
+    # 其他寄存器生成完全随机值
+    return (
+        random.randint(0, 0xFFFFFFFF)
+        if "s" in csr_name
+        else random.randint(0, 0xFFFFFFFFFFFFFFFF)
+    )
+
+
+def word_csr_csrs(opcode, syntax, xregs, fregs, imms, symbols, csrs_list):
+    if random.random() < 0.99:
+        csr = random.choice(csrs_list)
+    else:
+        csr = "0x{:x}".format(random.randint(0x000, 0xFFF))
+
+    if "pmpaddr" in csr and opcode in ["csrrw", "csrrs", "csrrc"]:
         tpe = MEM_R
         insts = ["la xreg1, symbol", "srai xreg1, xreg1, 1", syntax.format(csr)]
         symbols.append("symbol")
     else:
         tpe = CSR
-        insts = ["xor xreg1, xreg1, xreg1"]
-        for i in range(random.randint(0, 3)):
-            set_bits = random.choice([1, 3])
-            offset = random.randint(0, 31)
-            insts = insts + [
-                "addi xreg{}, zero, {}".format(i + 2, set_bits),
-                "slli xreg{}, xreg{}, {}".format(i + 2, i + 2, offset),
-                "add xreg1, xreg1, xreg{}".format(i + 2),
-            ]
-            xregs.append("xreg{}".format(i + 2))
-        insts.append(syntax.format(csr))
+        # 使用安全的临时寄存器 (x5-x7, x28-x31)
+        temp_regs = ["x5", "x6", "x7", "x28", "x29", "x30", "x31"]
+        rd = random.choice(temp_regs)
+        rs1 = random.choice(temp_regs)
+
+        # 构建上下文序列
+        insts = []
+
+        # 1. 随机设置特权级上下文
+        if random.random() < 0.3:
+            insts.append("csrwi mstatus, 0")
+            if random.random() < 0.2:
+                insts.append("csrwi mie, 0")
+
+        # 2. 准备源寄存器值
+        if opcode in ["csrrw", "csrrs", "csrrc"]:  # 寄存器源操作数
+            # 多种寄存器初始化策略
+            strategy = random.choices([0, 1, 2, 3], [0.1, 0.1, 0.7, 0.1])[0]
+            if strategy == 0:  # 清零
+                insts.append(f"mv {rs1}, zero")
+            elif strategy == 1:  # 全1
+                insts.append(f"li {rs1}, -1")
+            elif strategy == 2:  # 随机位掩码
+                insts.append(f"li {rs1}, {csr_randint(csr)}")
+            else:  # 保留随机值 (测试未初始化寄存器)
+                pass
+        else:  # 立即数操作
+            imm = csr_randint(csr) & 31
+            rs1 = str(imm)  # 立即数直接嵌入指令
+
+        # 4. 生成CSR指令
+        if opcode in ["csrrw", "csrrs", "csrrc"]:
+            insts.append(f"{opcode} {rd}, {csr}, {rs1}")
+        else:  # 立即数版本
+            insts.append(f"{opcode} {rd}, {csr}, {rs1}")
+
+        # 5. 添加结果使用指令 (防止优化并增加状态变化)
+        if random.random() < 0.8:
+            insts.append(f"addi x{random.randint(0,31)}, {rd}, 0")  # 伪使用
+        if random.random() < 0.3:
+            insts.append(f"sw {rd}, 0(sp)")
 
     return (tpe, insts)
 
 
-def word_csr_i(opcode, syntax, xregs, fregs, imms, symbols):
-    tpe = CSR
-    csr = random.choice(csr_names)
-
-    insts = [syntax.format(csr)]
-
-    return (tpe, insts)
+def word_csr(opcode, syntax, xregs, fregs, imms, symbols):
+    return word_csr_csrs(opcode, syntax, xregs, fregs, imms, symbols, csr_names)
 
 
 def word_sfence(opcode, syntax, xregs, fregs, imms, symbols):
@@ -277,8 +379,7 @@ opcodes_words = {
     ),
     "mem_w": (["sb", "sh", "sw", "sd", "fsw", "fsd", "fsq"], word_mem_w),
     "atomic": (list(rv32a.keys()) + list(rv64a.keys()), word_atomic),
-    "csr_r": (["csrrw", "csrrs", "csrrc"], word_csr_r),
-    "csr_i": (["csrrwi", "csrrsi", "csrrci"], word_csr_i),
+    "csr": (["csrrw", "csrrs", "csrrc", "csrrwi", "csrrsi", "csrrci"], word_csr),
     "sfence": (["sfence.vma"], word_sfence),
     "fp": (
         list(rv32f.keys())

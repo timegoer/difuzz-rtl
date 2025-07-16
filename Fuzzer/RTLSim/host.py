@@ -113,7 +113,7 @@ class rvRTLhost:
 
     @coroutine
     def run_test(self, rtl_input: rtlInput, assert_intr: bool):
-
+        print("[DifuzzRTL] Start RTL simulation")
         self.debug_print("[RTLHost] Start RTL simulation")
 
         fd = open(rtl_input.hexfile, "r")
@@ -141,7 +141,7 @@ class rvRTLhost:
         data = rtl_input.data
         data_addrs = []
         offset = 0
-        for n in range(6):
+        for n in range(0):
             data_start = symbols["_random_data{}".format(n)]
             data_end = symbols["_end_data{}".format(n)]
             data_addrs.append((data_start, data_end))

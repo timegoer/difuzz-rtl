@@ -5,7 +5,7 @@ import random
 
 from ISASim.host import isaInput
 from RTLSim.host import rtlInput
-from mutator import simInput, templates, P_M, P_S, P_U, V_U
+from mutator import PT, simInput, templates, P_M, P_S, P_U, V_U
 
 
 class rvPreProcessor:
@@ -22,7 +22,7 @@ class rvPreProcessor:
         self.er_num = 0
         self.cc_args = [
             cc,
-            "-march=rv64g",
+            "-march=rv64gch_zicbop_zicbom_zicboz",
             "-mabi=lp64",
             "-static",
             "-mcmodel=medany",
@@ -34,7 +34,32 @@ class rvPreProcessor:
             "-T",
             "{}/include/link.ld".format(template),
         ]
-
+        self.c2s_args = [
+            cc,
+            "-S",
+            "-march=rv64gch_zicbop_zicbom_zicboz",
+            "-mabi=lp64d",
+            "-O0",
+            "-nostdlib",
+            "-ffreestanding",
+            "-fno-unwind-tables",
+            "-fno-asynchronous-unwind-tables",
+            "-fno-exceptions",
+            "-mcmodel=medany",
+            "-fvisibility=hidden",
+        ]
+        self.pg_link = [
+            cc,
+            "-T",
+            self.base + "/../rv64-pt/link.ld",
+            "-static",
+            "-march=rv64gch",
+            "-mabi=lp64d",
+            "-nostdlib",
+            "-ffreestanding",
+            "-Wl,--gc-sections",
+            "-o",
+        ]
         self.elf2hex_args = [elf2hex, "--bit-width", "64", "--input"]
         self.objdump_args = [objdump, "-O", "binary"]
 
@@ -85,17 +110,18 @@ class rvPreProcessor:
         else:
             DINTR = []
         extra_args = DINTR + ["-I", "{}/include/p".format(self.template)]
-        if version in [V_U]:
-            rand = data[0] & 0xFFFFFFFF
-            extra_args = DINTR + [
-                "-DENTROPY=0x{:08x}".format(rand),
-                "-std=gnu99",
-                "-O2",
-                "-I",
-                "{}/include/v".format(self.template),
-                "{}/include/v/string.c".format(self.template),
-                "{}/include/v/vm.c".format(self.template),
-            ]
+        # if version in [V_U]:
+        #     rand = data[0] & 0xFFFFFFFF
+        #     extra_args = DINTR + [
+        #         "-DENTROPY=0x{:08x}".format(rand),
+        #         "-std=gnu99",
+        #         "-O2",
+        #         "-I",
+        #         "{}/include/v".format(self.template),
+        #         "-I/usr/riscv64-linux-gnu/include",
+        #         "{}/include/v/string.c".format(self.template),
+        #         "{}/include/v/vm.c".format(self.template),
+        #     ]
 
         si_name = self.base + "/.input_{}.si".format(self.proc_num)
         asm_name = self.base + "/.input_{}.S".format(self.proc_num)
@@ -103,8 +129,16 @@ class rvPreProcessor:
         bin_name = self.base + "/.input_{}.bin".format(self.proc_num)
         hex_name = self.base + "/.input_{}.hex".format(self.proc_num)
         sym_name = self.base + "/.input_{}.symbols".format(self.proc_num)
+        pt_c_name = self.base + "/../rv64-pt/rv64-pt.c"
         rtl_intr_name = self.base + "/.input_{}.rtl.intr".format(self.proc_num)
         isa_intr_name = self.base + "/.input_{}.isa.intr".format(self.proc_num)
+
+        if version in [PT]:
+            c2s_args = self.c2s_args + ["-o", test_template, pt_c_name]
+            c2s_ret = subprocess.call(c2s_args)
+            if c2s_ret != 0:
+                print("compile fail.")
+                exit(1)
 
         prefix_insts = sim_input.get_prefix()
         insts = sim_input.get_insts()
@@ -165,17 +199,24 @@ class rvPreProcessor:
         cc_args = self.cc_args + extra_args + [asm_name, "-o", elf_name]
         objdump_args = self.objdump_args + [elf_name, bin_name]
         cc_ret = -1
-        while True:
-            cc_ret = subprocess.call(cc_args)
-            # if cc_ret == -9: cc process is killed by OS due to memory usage
-            if cc_ret != -9:
-                break
+        if version in [PT]:
+            pg_link = self.pg_link + [elf_name, asm_name]
+            cc_ret = subprocess.call(pg_link)
+        if version not in [PT]:
+            while True:
+                cc_ret = subprocess.call(cc_args)
+                # if cc_ret == -9: cc process is killed by OS due to memory usage
+                if cc_ret != -9:
+                    break
 
         if cc_ret == 0:
-            subprocess.call(cc_args)
+            if version not in [PT]:
+                subprocess.call(cc_args)
 
-            elf2hex_args = self.elf2hex_args + [elf_name, "--output", hex_name]
-            subprocess.call(elf2hex_args)
+            if version not in [PT]:
+                elf2hex_args = self.elf2hex_args + [elf_name, "--output", hex_name]
+                subprocess.call(elf2hex_args)
+
             subprocess.call(objdump_args)
             symbols = self.get_symbols(elf_name, sym_name)
 
@@ -198,4 +239,4 @@ class rvPreProcessor:
             rtl_input = None
             symbols = None
 
-        return (isa_input, rtl_input, symbols)
+        return (isa_input, rtl_input, symbols, version)

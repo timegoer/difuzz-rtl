@@ -27,15 +27,15 @@ INIT_FREGS
         .align;
 trap_stvec:
         clear_sie;
+        csrr t1, sepc
+        addi t1, t1, 4
+        csrw sepc, t1
 _fuzz_suffix:
         /* Fuzz后缀 - 可以在此处插入自定义异常处理代码 */
         /**/
 _end_suffix:
-        csrr  t1, sepc          # 读取异常PC
-        addi  t1, t1, 4         # PC+4（RISC-V指令长度为4字节）
-        csrw  sepc, t1          # 更新异常返回地址
-        addi sp, sp, 32
         sret
+        
         /* 机器模式异常处理 */
         .align 4;
 trap_mtvec: 
@@ -95,9 +95,9 @@ _fuzz_main:
         /* 程序结束处理 - 兼容Spike和香山 */
 _good_exit:
         li a0, 0             # 设置a0=0表示正常退出 (HIT GOOD TRAP)
+        .word 0x5006b        # 香山trap指令 (0x5006b)
         li TESTEND, 1
         sw TESTEND, tohost, t5;
-        .word 0x5006b        # 香山trap指令 (0x5006b)
         
         /* 安全停止 */
         1: j 1b
